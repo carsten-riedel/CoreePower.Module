@@ -1,5 +1,5 @@
 function EnsureModule {
-    [alias("em")] 
+    [alias("cpem")] 
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
     param(
         [Parameter(Mandatory)]
@@ -31,7 +31,7 @@ EnsureModule -ModuleName "CoreePower.Lib" -ModuleVersion "0.0.0.21"
 
 function PublishModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("pm")]   
+    [alias("cppm")]   
     param(
         [string] $Path = ""
     )
@@ -161,7 +161,7 @@ function Merge-Object($target, $source) {
 
 function UpdateModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("um")]
+    [alias("cpum")]
     param(
         [string] $Path = ""
     )
@@ -319,7 +319,7 @@ $psd1layout = [pscustomobject]@{
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel"
 function CreateModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("cm")]
+    [alias("cpcm")]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -457,9 +457,12 @@ function SampleFunction {
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel" 
 #UpdateModuleVersion -Path "C:\temp\CoreePower.Module"
 
-function Private-Clear-SubModule {
+function RemoveOldModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    [alias("cprmo")]
     param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
         [string]$Name
     )
 
