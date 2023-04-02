@@ -1,3 +1,33 @@
+function EnsureModule {
+    [alias("em")] 
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    param(
+        [Parameter(Mandatory)]
+        [string]$ModuleName,
+        [Parameter(Mandatory)]
+        [string]$ModuleVersion
+    )
+
+    #Get module in the current session
+    $ModuleAvailableInSession = Get-Module -Name $ModuleName | Where-Object {$_.Version -ge $ModuleVersion}
+
+    if ($ModuleAvailableInSession) {
+        return
+    }
+    else {
+        $ModuleAvailableOnSystem = Get-Module -Name $ModuleName -ListAvailable | Where-Object {$_.Version -ge $ModuleVersion}
+        
+        if ($ModuleAvailableOnSystem) {
+            Import-Module -Name $ModuleName -MinimumVersion $ModuleVersion
+        } else {
+            Install-Module -Name $ModuleName -RequiredVersion $ModuleVersion -Force -AllowClobber
+            Import-Module -Name $ModuleName -MinimumVersion $ModuleVersion
+        }
+    }
+}
+
+EnsureModule -ModuleName "CoreePower.Lib" -ModuleVersion "0.0.0.21"
+
 
 function PublishModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
@@ -129,9 +159,9 @@ function Merge-Object($target, $source) {
 
 
 
-function UpdateModuleVersion {
+function UpdateModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("umv")]
+    [alias("um")]
     param(
         [string] $Path = ""
     )
@@ -235,7 +265,7 @@ Merge-Object $Data $psd1layoutx
     -CompanyName "$($Data.CompanyName)"  `
     -Tags $($Data.PrivateData.PSData.Tags)
     
-    (Get-Content -path "$($psd1BaseName.FullName)") | Set-Content -Encoding default -Path "$File"
+    (Get-Content -path "$($psd1BaseName.FullName)") | Set-Content -Encoding default -Path "$($psd1BaseName.FullName)"
     <#
     $towrite = ConvertToExpression -InputObject $Data
     $towrite = $towrite -replace "^\[pscustomobject\]", ""
@@ -289,7 +319,7 @@ $psd1layout = [pscustomobject]@{
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel"
 function CreateModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("crm")]
+    [alias("cm")]
     param(
         [Parameter(Mandatory)]
         [ValidateNotNullOrEmpty()]
@@ -409,6 +439,8 @@ function SampleFunction {
     -CompanyName "$Author" `
     -Tags @("empty","module")
 
+    (Get-Content -path "$Path\$ModuleName\$ModuleName.psd1") | Set-Content -Encoding default -Path "$Path\$ModuleName\$ModuleName.psd1"
+
 <#
     $towrite = ConvertToExpression -InputObject $psd1layout
 
@@ -424,3 +456,78 @@ function SampleFunction {
 
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel" 
 #UpdateModuleVersion -Path "C:\temp\CoreePower.Module"
+
+function Private-Clear-SubModule {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    param(
+        [string]$Name
+    )
+
+    $retval = @()
+
+    $localModules = (Get-Module -ListAvailable $Name) | Sort-Object Version -Descending
+
+    if( ($localModules -is [system.array]) -or ($null -ne $localModules))
+    {
+        foreach($item in $localModules)
+        {
+            if (($item.ModuleBase -Like "*$env:ProgramFiles*") -or ($item.ModuleBase -Like "*$env:ProgramW6432*"))
+            {
+                $Type = "System"
+            }
+            else {
+                $Type = "User"
+            }
+
+            $retval += [PSCustomObject]@{ Name = $item.Name; Version = $item.Version; Type = $Type ;Path = $item.ModuleBase.TrimEnd($item.Version.ToString()).TrimEnd('\').TrimEnd($item.Name).TrimEnd('\') ;Obj = $item }
+        }
+    }
+    else {
+
+        Write-Warning "$Name could not be found please check the name."
+        return
+    }
+
+    $UserModules = @($retval | Where-Object {$_.Type -eq "User"} | Sort-Object Version -Descending)
+    $MachineModules = @($retval | Where-Object {$_.Type -eq "System"} | Sort-Object Version -Descending)
+
+    $IsAdmin = (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+    if (-not $IsAdmin)
+    {
+        if ($UserModules.Count -ge 1)
+        {
+            for ($i = 1; $i -lt $UserModules.Count; $i++) {
+                $DirVers = "$($UserModules[$i].Path)\$($UserModules[$i].Name)\$($UserModules[$i].Version)"
+                Remove-Item -Recurse -Force -Path $DirVers
+                Write-Host "User rights removed user module:" $UserModules[$i].Name $UserModules[$i].Version
+            }
+        }
+    }
+    else {
+        if ($MachineModules.Count -ge 1)
+        {
+            for ($i = 1; $i -lt $MachineModules.Count; $i++) {
+                $DirVers = "$($MachineModules[$i].Path)\$($MachineModules[$i].Name)\$($MachineModules[$i].Version)"
+                Remove-Item -Recurse -Force -Path $DirVers
+                Write-Host "Admin rights removed admin module:" $MachineModules[$i].Name $MachineModules[$i].Version
+            }
+        }
+        if ($UserModules.Count -gt 0 -and $MachineModules.Count -gt 0)
+        {
+            if ($MachineModules[0].Version -ge $UserModules[0].Version)
+            {
+                for ($i = 0; $i -lt $UserModules.Count; $i++) {
+                    $DirVers = "$($UserModules[$i].Path)\$($UserModules[$i].Name)\$($UserModules[$i].Version)"
+                    Remove-Item -Recurse -Force -Path $DirVers
+                    Write-Host "Admin rights removed user module:" $UserModules[$i].Name $UserModules[$i].Version
+                }
+            }
+        }
+    }
+}
+
+
+#Private-Clear-SubModule -Name "CoreePower.Lib"
+#Private-Clear-SubModule -Name "CoreePower.Config"
+#Private-Clear-SubModule -Name "CoreePower.Module"
