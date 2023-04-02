@@ -265,7 +265,10 @@ Merge-Object $Data $psd1layoutx
     -CompanyName "$($Data.CompanyName)"  `
     -Tags $($Data.PrivateData.PSData.Tags)
     
-    (Get-Content -path "$($psd1BaseName.FullName)") | Set-Content -Encoding default -Path "$($psd1BaseName.FullName)"
+    $Content = Get-Content -path "$($psd1BaseName.FullName)" -Raw
+    $Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
+[   System.IO.File]::WriteAllLines("$($psd1BaseName.FullName)", $Content, $Utf8NoBomEncoding)
+
     <#
     $towrite = ConvertToExpression -InputObject $Data
     $towrite = $towrite -replace "^\[pscustomobject\]", ""
