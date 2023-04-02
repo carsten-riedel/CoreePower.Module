@@ -530,6 +530,28 @@ function RemoveOldModule {
     }
 }
 
+function ListModule {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    [alias("cplm")]
+    param(
+        [Parameter(Mandatory)]
+        [ValidateNotNullOrEmpty()]
+        [string]$Name
+    )
+
+    Write-Output "List the currently installed modules versions on your computer.`n"
+    Get-Module -ListAvailable "$Name*"
+
+    Write-Output "Displays function/commands loaded in your current session.`n"
+    Get-Module "$Name*" | ForEach-Object { Get-Command -Module $PSItem }
+
+    Write-Output "Show all commands available in the modules.`n"
+    Get-Command -Module "$Name*"
+
+    Write-Output "Displays the latest online version available.`n"
+    Find-Module -Name "$Name*"
+}
+
 
 #Private-Clear-SubModule -Name "CoreePower.Lib"
 #Private-Clear-SubModule -Name "CoreePower.Config"
