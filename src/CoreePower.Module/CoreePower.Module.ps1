@@ -244,12 +244,8 @@ function UpdateModule {
         DefaultCommandPrefix = ''
     }
 
-
-
-
-# Merge the properties of the second object into the combined object
-Merge-Object $Data $psd1layoutx 
-
+    # Merge the properties of the second object into the combined object
+    Merge-Object $Data $psd1layoutx 
 
     New-ModuleManifest `
     -Path "$($psd1BaseName.FullName)" `
@@ -265,19 +261,6 @@ Merge-Object $Data $psd1layoutx
     -CompanyName "$($Data.CompanyName)"  `
     -Tags $($Data.PrivateData.PSData.Tags)
     
-    #$Content = Get-Content -path "$($psd1BaseName.FullName)" -Raw
-    #$Utf8NoBomEncoding = New-Object System.Text.UTF8Encoding $False
-    #[System.IO.File]::WriteAllLines("$($psd1BaseName.FullName)", $Content, $Utf8NoBomEncoding)
-
-    <#
-    $towrite = ConvertToExpression -InputObject $Data
-    $towrite = $towrite -replace "^\[pscustomobject\]", ""
-
-    if (-not($null -eq $towrite))
-    {
-        Set-Content -Path "$($psd1BaseName.FullName)" -Value $towrite
-    }
-    #>
 }
 
 $psd1layout = [pscustomobject]@{
@@ -543,19 +526,70 @@ function ListModule {
     )
 
     Write-Output "List the currently installed modules versions on your computer.`n"
-    Get-Module -ListAvailable "$Name*"
+    Get-Module -ListAvailable "$Name" | Format-Table -AutoSize
 
     Write-Output "Displays function/commands loaded in your current session.`n"
-    Get-Module "$Name*" | ForEach-Object { Get-Command -Module $PSItem }
-
-    Write-Output "Show all commands available in the modules.`n"
-    Get-Command -Module "$Name*"
+    Get-Command -Module "$Name" -All | Sort-Object -Property @{Expression = 'Source' ; Ascending = $true }, @{ Expression = 'Version' ; Descending = $true}, @{ Expression = 'CommandType' ; Descending = $true} | Select-Object Source, Version , CommandType , Name | Format-Table -AutoSize
 
     Write-Output "Displays the latest online version available.`n"
-    Find-Module -Name "$Name*"
+    #Find-Module -Name "$Name"
 }
 
+function CoreePower {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    [alias("cpcp")]
+    param()
 
-#Private-Clear-SubModule -Name "CoreePower.Lib"
-#Private-Clear-SubModule -Name "CoreePower.Config"
-#Private-Clear-SubModule -Name "CoreePower.Module"
+    $me = "CoreePower*"
+
+    $Install=@('PowerShellGet', "$me") ; try { Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force } catch {} 
+    $nugetProvider = Get-PackageProvider -ListAvailable | Where-Object Name -eq "nuget"; if (-not($nugetProvider -and $nugetProvider.Version -ge "2.8.5.201")) { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null }
+    
+    $updateable = Find-Module -Name $Install -Repository PSGallery | Select-Object Name,Version | Where-Object { -not (Get-Module -ListAvailable -Name $_.Name | Sort-Object Version -Descending | Select-Object -First 1 | Where-Object Version -eq $_.Version) }
+    $updateDone = $false
+
+    foreach($item in $updateable)
+    {
+        Write-Output "Installing user module: $($item.Name) $($item.Version)" 
+        Install-Module -Name $item.Name -RequiredVersion $item.Version -Scope CurrentUser -Force -AllowClobber
+        Write-Output "Importing user module: $($_.Name) $($item.Version)"
+        Import-Module -Name $item.Name -MinimumVersion $item.Version
+        $updateDone = $true
+    }
+
+    if ($updateDone)
+    {
+        Write-Output "Updates have been applied. Please restart your PowerShell session to ensure that the changes take effect."
+    }
+
+    $localModules = (Get-Module -ListAvailable "$me") | Sort-Object Version -Descending
+
+    $localModules = $localModules | Group-Object Name
+
+    foreach($groups in $localModules)
+    {
+        $retval = @()
+
+        foreach ($item in $groups.Group)
+        {
+            if( ($groups.Group -is [system.array]) -or ($null -ne $groups.Group))
+            {
+                if (-not(($item.ModuleBase -Like "*$env:ProgramFiles*") -or ($item.ModuleBase -Like "*$env:ProgramW6432*")))
+                {
+                    $retval += [PSCustomObject]@{ Name = $item.Name; Version = $item.Version; Path = $item.ModuleBase.TrimEnd($item.Version.ToString()).TrimEnd('\').TrimEnd($item.Name).TrimEnd('\') ;Obj = $item }
+                }
+            }
+        }
+
+        $UserModules = @($retval | Sort-Object Version -Descending)
+       
+        if ($UserModules.Count -ge 1)
+        {
+            for ($i = 1; $i -lt $UserModules.Count; $i++) {
+                $DirVers = "$($UserModules[$i].Path)\$($UserModules[$i].Name)\$($UserModules[$i].Version)"
+                Remove-Item -Recurse -Force -Path $DirVers
+                Write-Host "Removed old user module:" $UserModules[$i].Name $UserModules[$i].Version
+            }
+        }
+    }
+}
