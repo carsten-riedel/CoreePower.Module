@@ -166,13 +166,13 @@ function PublishModule2 {
 
         $executable = Get-Command "git" -ErrorAction SilentlyContinue
         
-        [string]$Name = $Data.RootModule
-        $Name = $Name -replace '\.psm1$'
+        [string]$NameRoot = $Data.RootModule
+        $NameRoot = $NameRoot -replace '\.psm1$'
 
         if ($executable) {
             Write-Output "Git executable found at $($executable.Source) automatic git add -A, commit and push."
             &git -C "$Path" add -A
-            &git -C "$Path" commit -m "Publish $($Name) $($Data.ModuleVersion)"
+            &git -C "$Path" commit -m "Publish $NameRoot $($Data.ModuleVersion)"
             &git -C "$Path" tag "V$($Data.ModuleVersion)"
             &git -C "$Path" push 
             &git -C "$Path" push --tags
@@ -810,4 +810,3 @@ $roots = @("C:\","D:\", "E:\") ; $roots | ForEach-Object { Get-ChildItem -Path $
 $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | ForEach-Object { Get-ChildItem -Path $_ -Include @("*.cs") -Recurse -ErrorAction SilentlyContinue } | Where-Object {!$_.PSIsContainer -and $_.Length -lt 100000 } | Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "power" } | Select-Object -ExpandProperty FullName
 
 #>
-
