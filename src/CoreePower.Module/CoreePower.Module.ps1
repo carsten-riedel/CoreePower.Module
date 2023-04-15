@@ -167,11 +167,12 @@ function PublishModule2 {
         $executable = Get-Command "git" -ErrorAction SilentlyContinue
         
         [string]$Name = $Data.RootModule
+        $Name = $Name -replace '\.psm1$'
 
         if ($executable) {
             Write-Output "Git executable found at $($executable.Source) automatic git add -A, commit and push."
             &git -C "$Path" add -A
-            &git -C "$Path" commit -m "Publish $($Name.Replace('\.psm1$', '')) $($Data.ModuleVersion)"
+            &git -C "$Path" commit -m "Publish $($Name) $($Data.ModuleVersion)"
             &git -C "$Path" tag "V$($Data.ModuleVersion)"
             &git -C "$Path" push 
             &git -C "$Path" push --tags
