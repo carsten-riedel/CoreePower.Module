@@ -163,19 +163,28 @@ function PublishModule2 {
         $executable = Get-Command "git" -ErrorAction SilentlyContinue
         
         if ($executable) {
-            Write-Host "Git executable found at $($executable.Source) automatic git add -A, commit and push"
+            Write-Output "Git executable found at $($executable.Source) automatic git add -A, commit and push"
             &git -C "$Path" add -A
             &git -C "$Path" commit -m "Publish $($Data.RootModule.Replace('\.psm1$', '')) $($Data.ModuleVersion)" 
             &git -C "$Path" push 
         }
         else {
-            Write-Host "Git executable not found in PATH environment variable."
+            Write-Output "Git executable not found in PATH environment variable."
         }
     }
     catch {
         Write-Error "Failed to publish module: $($_.Exception.Message)"
     }
 
+    $moduleName = Split-Path $MyInvocation.MyCommand.Module.Name -Leaf
+    $modulePath = Split-Path $MyInvocation.MyCommand.Module.Path
+    $moduleVersion = $MyInvocation.MyCommand.Module.Version
+
+    Write-Output "Current module information:"
+    Write-Output "Name: $moduleName"
+    Write-Output "Path: $modulePath"
+    Write-Output "Version: $moduleVersion"
+    
 }
 
 function Merge-Hashtable($target, $source) {
@@ -806,5 +815,3 @@ $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | 
 
 #PublishModule2
 #$x=1
-
-
