@@ -160,6 +160,10 @@ function PublishModule2 {
     try {
         Publish-Module -Path "$Path" -NuGetApiKey "$NuGetAPIKey" -Repository "PSGallery" -Verbose
 
+        $moduleName = Split-Path $MyInvocation.MyCommand.Module.Name -Leaf
+        $moduleVersion = $MyInvocation.MyCommand.Module.Version
+        Write-Output "Publish with $moduleName $moduleVersion."
+
         $executable = Get-Command "git" -ErrorAction SilentlyContinue
         
         if ($executable) {
@@ -176,15 +180,6 @@ function PublishModule2 {
         Write-Error "Failed to publish module: $($_.Exception.Message)"
     }
 
-    $moduleName = Split-Path $MyInvocation.MyCommand.Module.Name -Leaf
-    $modulePath = Split-Path $MyInvocation.MyCommand.Module.Path
-    $moduleVersion = $MyInvocation.MyCommand.Module.Version
-
-    Write-Output "Current module information:"
-    Write-Output "Name: $moduleName"
-    Write-Output "Path: $modulePath"
-    Write-Output "Version: $moduleVersion"
-    
 }
 
 function Merge-Hashtable($target, $source) {
