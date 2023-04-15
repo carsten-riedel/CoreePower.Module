@@ -165,7 +165,7 @@ function PublishModule2 {
         if ($executable) {
             Write-Host "Git executable found at $($executable.Source) add, all commit and push"
             &git -C "$Path" add -A
-            &git -C "$Path" commit -m "Publish $($Data.RootModule) $($Data.ModuleVersion)" 
+            &git -C "$Path" commit -m "Publish $([System.IO.Path]::GetFileNameWithoutExtension($Data.RootModule)) $($Data.ModuleVersion)" 
             &git -C "$Path" push 
         }
         else {
