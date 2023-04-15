@@ -63,16 +63,8 @@ function PublishModule {
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-    $PackageProviderModule = Get-InstalledModule -Name PackageManagement -MinimumVersion 1.4.8.1 -ErrorAction SilentlyContinue
-    $PowerShellGetModule = Get-InstalledModule -Name PowerShellGet -MinimumVersion 2.2.5 -ErrorAction SilentlyContinue
-
-    if (!$PackageProviderModule -or !$PowerShellGetModule) {
-        # Either or both modules are missing or have a lower version, so install/update them
-        Install-PackageProvider -Name NuGet -Force -Scope CurrentUser | Out-Null
-        Install-Module PowerShellGet -AllowClobber -Force -Scope CurrentUser | Out-Null
-        Write-Error  "Error: The PackageManagement or PowerShellGet modules were outdated in the user scope and have been updated. Please close and reopen your PowerShell session and try again."
-        return
-    }
+    Initialize-PowerShellGetLatest
+    Initialize-PackageManagementLatest
 
     [string]$NuGetAPIKey = Get-Content -Path "$($keyFileFullName.FullName)"
 
@@ -125,8 +117,163 @@ function Merge-Object($target, $source) {
     }
 }
 
+function Convert-JsonToPowerShellNotation {
+    [alias("cjpn")] 
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$JsonString
+    )
 
+    function Convert-ObjectToPowerShellNotation {
+        param (
+            [Parameter(Mandatory=$true)]
+            [PSObject]$InputObject
+        )
 
+        $outputString = '@{ '
+
+        foreach ($property in $InputObject.PSObject.Properties) {
+            $key = $property.Name
+            $value = $property.Value
+
+            if ($value -is [string]) {
+                $outputString += "$key = '$value'; "
+            } elseif ($value -is [bool]) {
+                $outputString += "$key = $([bool]::ToString($value).ToLower()); "
+            } elseif ($value -is [array]) {
+                $outputString += "$key = @($(Convert-ArrayToPowerShellNotation -InputArray $value)); "
+            } else {
+                $outputString += "$key = $(Convert-ObjectToPowerShellNotation -InputObject $value); "
+            }
+        }
+
+        $outputString = $outputString.TrimEnd('; ')
+        $outputString += ' }'
+
+        return $outputString
+    }
+
+    function Convert-ArrayToPowerShellNotation {
+        param (
+            [Parameter(Mandatory=$true)]
+            [array]$InputArray
+        )
+
+        $outputString = ""
+
+        foreach ($element in $InputArray) {
+            if ($element -is [string]) {
+                $outputString += "'$element', `n"
+            } elseif ($element -is [bool]) {
+                $outputString += "$([bool]::ToString($element).ToLower()), `n"
+            } elseif ($element -is [array]) {
+                $outputString += "@($(Convert-ArrayToPowerShellNotation -InputArray $element)), `n"
+            } else {
+                $outputString += "$(Convert-ObjectToPowerShellNotation -InputObject $element), `n"
+            }
+        }
+
+        $outputString = $outputString.TrimEnd(', ')
+
+        return $outputString
+    }
+
+    try {
+        $PowerShellObject = $JsonString | ConvertFrom-Json
+    }
+    catch {
+        Write-Error "Failed to convert JSON string to PowerShell object. Please ensure the input is a valid JSON string."
+        return
+    }
+
+    if ($PowerShellObject -is [array]) {
+        return "@($(Convert-ArrayToPowerShellNotation -InputArray $PowerShellObject))"
+    } else {
+        return (Convert-ObjectToPowerShellNotation -InputObject $PowerShellObject)
+    }
+}
+
+function Convert-JsonToPowerShellNotation2 {
+    param (
+        [Parameter(Mandatory=$true)]
+        [string]$JsonString
+    )
+
+    function Convert-ObjectToPowerShellNotation2 {
+        param (
+            [Parameter(Mandatory=$true)]
+            [PSObject]$InputObject,
+            [int]$Indent = 0
+        )
+
+        $indentation = " " * $Indent
+        $outputString = "@{" + [Environment]::NewLine
+
+        foreach ($property in $InputObject.PSObject.Properties) {
+            $key = $property.Name
+            $value = $property.Value
+
+            if ($value -is [string]) {
+                $outputString += "$indentation$key = '$value';" + [Environment]::NewLine
+            } elseif ($value -is [bool]) {
+                $outputString += "$indentation$key = $([bool]::ToString($value).ToLower());" + [Environment]::NewLine
+            } elseif ($value -is [array]) {
+                $outputString += "$indentation$key = @(" + [Environment]::NewLine
+                $outputString += "$(Convert-ArrayToPowerShellNotation2 -InputArray $value -Indent ($Indent + 4))" + [Environment]::NewLine
+                $outputString += "$indentation);" + [Environment]::NewLine
+            } else {
+                $outputString += "$indentation$key = $(Convert-ObjectToPowerShellNotation2 -InputObject $value -Indent ($Indent + 4));" + [Environment]::NewLine
+            }
+        }
+
+        $outputString += $indentation + '}'
+
+        return $outputString
+    }
+
+    function Convert-ArrayToPowerShellNotation2 {
+        param (
+            [Parameter(Mandatory=$true)]
+            [array]$InputArray,
+            [int]$Indent = 0
+        )
+
+        $indentation = " " * $Indent
+        $outputString = ""
+
+        foreach ($element in $InputArray) {
+            if ($element -is [string]) {
+                $outputString += $indentation + "'$element'," + [Environment]::NewLine
+            } elseif ($element -is [bool]) {
+                $outputString += $indentation + "$([bool]::ToString($element).ToLower())," + [Environment]::NewLine
+            } elseif ($element -is [array]) {
+                $outputString += $indentation + "@(" + [Environment]::NewLine
+                $outputString += "$(Convert-ArrayToPowerShellNotation2 -InputArray $element -Indent ($Indent + 4))" + [Environment]::NewLine
+                $outputString += $indentation + ")," + [Environment]::NewLine
+            } else {
+                $outputString += $indentation + "$(Convert-ObjectToPowerShellNotation2 -InputObject $element -Indent ($Indent + 4))," + [Environment]::NewLine
+            }
+        }
+
+        $outputString = $outputString.TrimEnd(",`n")
+
+        return $outputString
+    }
+
+    try {
+        $PowerShellObject = $JsonString | ConvertFrom-Json
+    }
+    catch {
+        Write-Error "Failed to convert JSON string to PowerShell object. Please ensure the input is a valid JSON string."
+        return
+    }
+    
+    if ($PowerShellObject -is [array]) {
+        return "@(`n$(Convert-ArrayToPowerShellNotation2 -InputArray $PowerShellObject)`n)"
+    } else {
+        return (Convert-ObjectToPowerShellNotation2 -InputObject $PowerShellObject)
+    }
+}
 
 function UpdateModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
@@ -174,7 +321,7 @@ function UpdateModule {
     $Data.ModuleVersion = [string]$newver
     $Data.PrivateData.PSData.LicenseUri = $Data.PrivateData.PSData.LicenseUri.Replace($ver, $newver)
 
-    $psd1layoutx = [pscustomobject]@{
+    $psd1layoutData = [pscustomobject]@{
         RootModule = ''
         ModuleVersion = ''
         CompatiblePSEditions = @()
@@ -214,8 +361,159 @@ function UpdateModule {
     }
 
     # Merge the properties of the second object into the combined object
-    Merge-Object $Data $psd1layoutx 
+    Merge-Object $Data $psd1layoutData
 
+
+    $LineRootModule = if ($Data.RootModule -ne "") { "RootModule = '$($Data.RootModule)'" } else { "# RootModule = ''" }
+
+    $LineModuleVersion = if ($Data.ModuleVersion -ne "") { "ModuleVersion = '$($Data.ModuleVersion)'" } else { "# ModuleVersion = ''" }
+    $LineCompatiblePSEditions = if ($Data.CompatiblePSEditions -ne "") { "CompatiblePSEditions = '$($Data.CompatiblePSEditions)'" } else { "# CompatiblePSEditions = @()" }
+    $LineRequiredModules = if ($Data.RequiredModules -ne "") { "RequiredModules = $(cjpn -JsonString ([array]$Data.RequiredModules | ConvertTo-Json))" } else { "# RequiredModules = @()" }
+    $LineFunctionsToExport = if ($Data.FunctionsToExport -ne "") { "FunctionsToExport = $(Convert-JsonToPowerShellNotation2 -JsonString ($Data.FunctionsToExport | ConvertTo-Json))" } else { "# FunctionsToExport = @()" }
+
+    $LineTags = if ($Data.PrivateData.PSData.Tags -ne "") { "Tags = $(Convert-JsonToPowerShellNotation2 -JsonString ($Data.PrivateData.PSData.Tags | ConvertTo-Json))" } else { "# Tags = @()" }
+    $LineLicenseUri =  if ($Data.LicenseUri -ne "") { "LicenseUri = '$($Data.LicenseUri)'" } else { "# LicenseUri = ''" }
+    
+    $LineGUID  = if ($Data.LicenseUri -ne "") { "LicenseUri = '$($Data.LicenseUri)'" } else { "# LicenseUri = ''" }
+
+    $LineAuthor  = if ($Data.Author -ne "") { "Author = '$($Data.Author)'" } else { "# Author = ''" }
+    $LineCompanyName  = if ($Data.CompanyName -ne "") { "CompanyName = '$($Data.CompanyName)'" } else { "# CompanyName = ''" }
+    $LineCopyright  = if ($Data.Copyright -ne "") { "Copyright = '$($Data.Copyright)'" } else { "# Copyright = ''" }
+    $LineDescription  = if ($Data.Description -ne "") { "Description = '$($Data.Description)'" } else { "# Description = ''" }
+    
+
+    $LineAliasesToExport  = if ($Data.AliasesToExport -ne "") { "AliasesToExport = $(Convert-JsonToPowerShellNotation2 -JsonString ($Data.AliasesToExport | ConvertTo-Json))" } else { "# AliasesToExport = ''" }
+    
+
+
+$towrite = @"
+#
+# Module manifest for module 'CoreePower.Module'
+#
+# Generated by: Carsten Riedel
+#
+# Generated on: 4/3/2023
+#
+
+@{
+
+# Script module or binary module file associated with this manifest.
+$LineRootModule
+
+# Version number of this module.
+$LineModuleVersion
+
+# Supported PSEditions
+$LineCompatiblePSEditions 
+
+# ID used to uniquely identify this module
+$LineGUID
+
+# Author of this module
+$LineAuthor
+
+# Company or vendor of this module
+$LineCompanyName
+
+# Copyright statement for this module
+$LineCopyright
+
+# Description of the functionality provided by this module
+$LineDescription
+
+# Minimum version of the Windows PowerShell engine required by this module
+# PowerShellVersion = ''
+
+# Name of the Windows PowerShell host required by this module
+# PowerShellHostName = ''
+
+# Minimum version of the Windows PowerShell host required by this module
+# PowerShellHostVersion = ''
+
+# Minimum version of Microsoft .NET Framework required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
+# DotNetFrameworkVersion = ''
+
+# Minimum version of the common language runtime (CLR) required by this module. This prerequisite is valid for the PowerShell Desktop edition only.
+# CLRVersion = ''
+
+# Processor architecture (None, X86, Amd64) required by this module
+# ProcessorArchitecture = ''
+
+# Modules that must be imported into the global environment prior to importing this module
+$LineRequiredModules
+
+# Assemblies that must be loaded prior to importing this module
+# RequiredAssemblies = @()
+
+# Script files (.ps1) that are run in the caller's environment prior to importing this module.
+# ScriptsToProcess = @()
+
+# Type files (.ps1xml) to be loaded when importing this module
+# TypesToProcess = @()
+
+# Format files (.ps1xml) to be loaded when importing this module
+# FormatsToProcess = @()
+
+# Modules to import as nested modules of the module specified in RootModule/ModuleToProcess
+# NestedModules = @()
+
+# Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
+$LineFunctionsToExport
+
+# Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
+CmdletsToExport = '*'
+
+# Variables to export from this module
+VariablesToExport = '*'
+
+# Aliases to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no aliases to export.
+$LineAliasesToExport
+
+# DSC resources to export from this module
+# DscResourcesToExport = @()
+
+# List of all modules packaged with this module
+# ModuleList = @()
+
+# List of all files packaged with this module
+# FileList = @()
+
+# Private data to pass to the module specified in RootModule/ModuleToProcess. This may also contain a PSData hashtable with additional module metadata used by PowerShell.
+PrivateData = @{
+
+    PSData = @{
+
+        # Tags applied to this module. These help with module discovery in online galleries.
+        $LineTags
+
+        # A URL to the license for this module.
+        $LineLicenseUri
+
+        # A URL to the main website for this project.
+        # ProjectUri = ''
+
+        # A URL to an icon representing this module.
+        # IconUri = ''
+
+        # ReleaseNotes of this module
+        # ReleaseNotes = ''
+
+    } # End of PSData hashtable
+
+} # End of PrivateData hashtable
+
+# HelpInfo URI of this module
+# HelpInfoURI = ''
+
+# Default prefix for commands exported from this module. Override the default prefix using Import-Module -Prefix.
+# DefaultCommandPrefix = ''
+
+}
+
+"@
+
+Set-Content -Path "$Path\test.txt" -Value "$towrite"
+<#
     New-ModuleManifest `
     -Path "$($psd1BaseName.FullName)" `
     -GUID "$($Data.GUID)" `
@@ -229,47 +527,9 @@ function UpdateModule {
     -RequiredModules $Data.RequiredModules  `
     -CompanyName "$($Data.CompanyName)"  `
     -Tags $($Data.PrivateData.PSData.Tags)
-    
+    #>
 }
 
-$psd1layout = [pscustomobject]@{
-    RootModule = ''
-    ModuleVersion = ''
-    CompatiblePSEditions = @()
-    GUID = ''
-    Author = ''
-    CompanyName = ''
-    Copyright = ''
-    Description = ''
-    PowerShellVersion = ''
-    PowerShellHostName = ''
-    PowerShellHostVersion = ''
-    DotNetFrameworkVersion = ''
-    CLRVersion = ''
-    ProcessorArchitecture = ''
-    RequiredModules = @()
-    RequiredAssemblies = @()
-    ScriptsToProcess = @()
-    TypesToProcess = @()
-    FormatsToProcess = @()
-    NestedModules = @()
-    FunctionsToExport = @()
-    CmdletsToExport = @()
-    VariablesToExport = ''
-    AliasesToExport = @()
-    DscResourcesToExport = @()
-    ModuleList = @()
-    FileList = @()
-    PrivateData = @{PSData = @{
-            LicenseUri = ''
-            Tags = @()
-            ProjectUri = ''
-            IconUri = ''
-            ReleaseNotes = ''
-        }}
-    HelpInfoURI = ''
-    DefaultCommandPrefix = ''
-}
 
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel"
 function CreateModule {
@@ -409,8 +669,11 @@ function SampleFunction {
     #>
 }
 
+<<<<<<< HEAD
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel" 
 #UpdateModuleVersion -Path "C:\temp\CoreePower.Module"
+=======
+>>>>>>> 5085ff14574c7c3b691eabde4c45af2a36535116
 
 function ListModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
@@ -431,6 +694,12 @@ function ListModule {
     #Find-Module -Name "$Name"
 }
 
+<<<<<<< HEAD
+=======
+
+
+
+>>>>>>> 5085ff14574c7c3b691eabde4c45af2a36535116
 <#
 function Expand-NuGetPackage {
     param(
@@ -578,7 +847,18 @@ $roots = @("C:\","D:\", "E:\") ; $roots | ForEach-Object { Get-ChildItem -Path $
 
 $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | ForEach-Object { Get-ChildItem -Path $_ -Include @("*.cs") -Recurse -ErrorAction SilentlyContinue } | Where-Object {!$_.PSIsContainer -and $_.Length -lt 100000 } | Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "power" } | Select-Object -ExpandProperty FullName
 
+<<<<<<< HEAD
 #>
 
 UpdateModule
 $x=1
+=======
+
+
+
+$roots = @("C:\") ; $roots | ForEach-Object { Get-ChildItem -Path $_ -Include @("nuget.exe") -Recurse -ErrorAction SilentlyContinue } | Where-Object {!$_.PSIsContainer } | Select-Object -ExpandProperty FullName
+#>
+
+
+UpdateModule
+>>>>>>> 5085ff14574c7c3b691eabde4c45af2a36535116
