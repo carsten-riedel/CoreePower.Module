@@ -155,7 +155,7 @@ function gitcommitpush {
 
     &git -C "$Path" add -A
     &git -C "$Path" commit -m "Auto comment" 
-    
+    &git -C "$Path" push 
 }
 
 
