@@ -159,27 +159,24 @@ function PublishModule2 {
 
     try {
         Publish-Module -Path "$Path" -NuGetApiKey "$NuGetAPIKey" -Repository "PSGallery" -Verbose
-        gitcommitpush -Path "$Path" -Comment "Publish $($Data.RootModule) $($Data.ModuleVersion)"
+
+        $executable = Get-Command "git" -ErrorAction SilentlyContinue
+
+        if ($executable) {
+            Write-Host "Git executable found at $($executable.Source) add, all commit and push"
+            &git -C "$Path" add -A
+            &git -C "$Path" commit -m "Publish $($Data.RootModule) $($Data.ModuleVersion)" 
+            &git -C "$Path" push 
+        }
+        else {
+            Write-Host "Git executable not found in PATH environment variable."
+        }
     }
     catch {
         Write-Error "Failed to publish module: $($_.Exception.Message)"
     }
 
 }
-
-function gitcommitpush {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("cpgit")]   
-    param(
-        [string] $Path = "",
-        [string] $Comment = ""
-    )
-
-    &git -C "$Path" add -A
-    &git -C "$Path" commit -m "$Comment" 
-    &git -C "$Path" push 
-}
-
 
 function Merge-Hashtable($target, $source) {
     $source.Keys | ForEach-Object {
