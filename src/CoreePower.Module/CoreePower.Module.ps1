@@ -72,6 +72,93 @@ function PublishModule {
 
 }
 
+function PublishModule2 {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    [alias("cppm2")]   
+    param(
+        [string] $Path = ""
+    )
+
+    if ($Path -eq "")
+    {
+        $loc = Get-Location
+        $Path = $loc.Path
+    }
+
+    $Path = $Path.TrimEnd('\')
+
+    $LastDirectory = Split-Path -Path $Path -Leaf
+    $psd1BaseName = Get-ChildItem -Path $Path | Where-Object { $_.Extension -eq ".psd1" } | Select-Object BaseName
+    $psm1BaseName = Get-ChildItem -Path $Path | Where-Object { $_.Extension -eq ".psm1" } | Select-Object BaseName
+
+    if($psd1BaseName.Count -eq 0)
+    {
+        Write-Error "Error: no powerShell module manifest files found. Please ensure that there is one .psd1 file in the directory and try again."
+        return
+    }
+
+    if($psm1BaseName.Count -eq 0)
+    {
+        Write-Error "Error: no root module files found. Please ensure that there is one .psm1 file in the directory and try again."
+        return
+    }
+
+    if($psd1BaseName.Count -gt 1)
+    {
+        Write-Error "Error: multiple module definition files found. Please ensure that there is only one .psd1 file in the directory and try again."
+        return
+    }
+
+    if($psm1BaseName.Count -gt 1)
+    {
+        Write-Error "Error: multiple module definition files found. Please ensure that there is only one .psm1 file in the directory and try again."
+        return
+    }
+
+    if($LastDirectory -eq $psd1BaseName -and $psd1BaseName -eq $psm1BaseName)
+    {
+        Write-Error "Error: The parent directory name, .psd1 filename, and .psm1 filename must all be identical. Please ensure that all three names match and try again."
+        return
+    }
+
+
+    $keyFileFullName = Get-ChildItem -Path $Path -Recurse | Where-Object { $_.Name -eq ".key" } | Select-Object FullName
+    if($null -eq $keyFileFullName)
+    {
+        Write-Error  "Error: A .key file containing the NuGet API key is missing from the publish directory. Please add the file and try again."
+        return
+    }
+
+    $gitignoreFullName = Get-ChildItem -Path $Path -Recurse | Where-Object { $_.Name -eq ".gitignore" } | Select-Object FullName
+    if($null -eq $gitignoreFullName)
+    {
+        Write-Warning  "Warning: A .gitignore file is not present, the NuGet API key may be exposed in the publish directory. Please include a .gitignore file with ignore statements for the key to prevent unauthorized access."
+    }
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
+    Initialize-PowerShellGetLatest
+    Initialize-PackageManagementLatest
+
+    [string]$NuGetAPIKey = Get-Content -Path "$($keyFileFullName.FullName)"
+
+    Publish-Module -Path "$Path" -NuGetApiKey "$NuGetAPIKey" -Repository "PSGallery" -Verbose
+
+}
+
+function gitcommitpush {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    [alias("cpgit")]   
+    param(
+        [string] $Path = ""
+    )
+
+    &git -C "$Path" add -A
+    &git -C "$Path" commit -m "Auto comment" 
+    
+}
+
+
 function Merge-Hashtable($target, $source) {
     $source.Keys | ForEach-Object {
         $key = $_
@@ -375,7 +462,11 @@ function UpdateModule {
     -Author "$($Data.Author)" `
     -RequiredModules $Data.RequiredModules  `
     -CompanyName "$($Data.CompanyName)"  `
-    -Tags $($Data.PrivateData.PSData.Tags)
+    -Tags $($Data.PrivateData.PSData.Tags) `
+    -CmdletsToExport '' `
+    -VariablesToExport ''
+
+    #(Get-Content -path "$Path\$ModuleName\$ModuleName.psd1") | Set-Content -Encoding default -Path "$Path\$ModuleName\$ModuleName.psd1"
     
 }
 
@@ -692,5 +783,9 @@ $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | 
 
 #>
 
-UpdateModule
-#$x=1
+#UpdateModule
+
+gitcommitpush -Path "C:\base\github.com\carsten-riedel\CoreePower.Module"
+$x=1
+
+
