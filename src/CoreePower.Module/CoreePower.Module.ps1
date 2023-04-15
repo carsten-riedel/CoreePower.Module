@@ -811,7 +811,3 @@ $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | 
 
 #>
 
-#UpdateModule
-
-#PublishModule2
-#$x=1
