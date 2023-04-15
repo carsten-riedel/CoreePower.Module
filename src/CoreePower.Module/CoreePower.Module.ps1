@@ -1,34 +1,3 @@
-function EnsureModule {
-    [alias("cpem")] 
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    param(
-        [Parameter(Mandatory)]
-        [string]$ModuleName,
-        [Parameter(Mandatory)]
-        [string]$ModuleVersion
-    )
-
-    #Get module in the current session
-    $ModuleAvailableInSession = Get-Module -Name $ModuleName | Where-Object {$_.Version -ge $ModuleVersion}
-
-    if ($ModuleAvailableInSession) {
-        return
-    }
-    else {
-        $ModuleAvailableOnSystem = Get-Module -Name $ModuleName -ListAvailable | Where-Object {$_.Version -ge $ModuleVersion}
-        
-        if ($ModuleAvailableOnSystem) {
-            Import-Module -Name $ModuleName -MinimumVersion $ModuleVersion
-        } else {
-            Install-Module -Name $ModuleName -RequiredVersion $ModuleVersion -Force -AllowClobber
-            Import-Module -Name $ModuleName -MinimumVersion $ModuleVersion
-        }
-    }
-}
-
-EnsureModule -ModuleName "CoreePower.Lib" -ModuleVersion "0.0.0.21"
-
-
 function PublishModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
     [alias("cppm")]   
@@ -443,79 +412,6 @@ function SampleFunction {
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel" 
 #UpdateModuleVersion -Path "C:\temp\CoreePower.Module"
 
-function RemoveOldModule {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("cprmo")]
-    param(
-        [Parameter(Mandatory)]
-        [ValidateNotNullOrEmpty()]
-        [string]$Name
-    )
-
-    $retval = @()
-
-    $localModules = (Get-Module -ListAvailable $Name) | Sort-Object Version -Descending
-
-    if( ($localModules -is [system.array]) -or ($null -ne $localModules))
-    {
-        foreach($item in $localModules)
-        {
-            if (($item.ModuleBase -Like "*$env:ProgramFiles*") -or ($item.ModuleBase -Like "*$env:ProgramW6432*"))
-            {
-                $Type = "System"
-            }
-            else {
-                $Type = "User"
-            }
-
-            $retval += [PSCustomObject]@{ Name = $item.Name; Version = $item.Version; Type = $Type ;Path = $item.ModuleBase.TrimEnd($item.Version.ToString()).TrimEnd('\').TrimEnd($item.Name).TrimEnd('\') ;Obj = $item }
-        }
-    }
-    else {
-
-        Write-Warning "$Name could not be found please check the name."
-        return
-    }
-
-    $UserModules = @($retval | Where-Object {$_.Type -eq "User"} | Sort-Object Version -Descending)
-    $MachineModules = @($retval | Where-Object {$_.Type -eq "System"} | Sort-Object Version -Descending)
-
-    $IsAdmin = (New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-    if (-not $IsAdmin)
-    {
-        if ($UserModules.Count -ge 1)
-        {
-            for ($i = 1; $i -lt $UserModules.Count; $i++) {
-                $DirVers = "$($UserModules[$i].Path)\$($UserModules[$i].Name)\$($UserModules[$i].Version)"
-                Remove-Item -Recurse -Force -Path $DirVers
-                Write-Host "User rights removed user module:" $UserModules[$i].Name $UserModules[$i].Version
-            }
-        }
-    }
-    else {
-        if ($MachineModules.Count -ge 1)
-        {
-            for ($i = 1; $i -lt $MachineModules.Count; $i++) {
-                $DirVers = "$($MachineModules[$i].Path)\$($MachineModules[$i].Name)\$($MachineModules[$i].Version)"
-                Remove-Item -Recurse -Force -Path $DirVers
-                Write-Host "Admin rights removed admin module:" $MachineModules[$i].Name $MachineModules[$i].Version
-            }
-        }
-        if ($UserModules.Count -gt 0 -and $MachineModules.Count -gt 0)
-        {
-            if ($MachineModules[0].Version -ge $UserModules[0].Version)
-            {
-                for ($i = 0; $i -lt $UserModules.Count; $i++) {
-                    $DirVers = "$($UserModules[$i].Path)\$($UserModules[$i].Name)\$($UserModules[$i].Version)"
-                    Remove-Item -Recurse -Force -Path $DirVers
-                    Write-Host "Admin rights removed user module:" $UserModules[$i].Name $UserModules[$i].Version
-                }
-            }
-        }
-    }
-}
-
 function ListModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
     [alias("cplm")]
@@ -534,66 +430,6 @@ function ListModule {
     Write-Output "Displays the latest online version available.`n"
     #Find-Module -Name "$Name"
 }
-
-function CoreePower {
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
-    [alias("cpcp")]
-    param()
-
-    $me = "CoreePower*"
-
-    $Install=@('PowerShellGet', "$me") ; try { Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force } catch {} 
-    $nugetProvider = Get-PackageProvider -ListAvailable | Where-Object Name -eq "nuget"; if (-not($nugetProvider -and $nugetProvider.Version -ge "2.8.5.201")) { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force | Out-Null }
-    
-    $updateable = Find-Module -Name $Install -Repository PSGallery | Select-Object Name,Version | Where-Object { -not (Get-Module -ListAvailable -Name $_.Name | Sort-Object Version -Descending | Select-Object -First 1 | Where-Object Version -eq $_.Version) }
-    $updateDone = $false
-
-    foreach($item in $updateable)
-    {
-        Write-Output "Installing user module: $($item.Name) $($item.Version)" 
-        Install-Module -Name $item.Name -RequiredVersion $item.Version -Scope CurrentUser -Force -AllowClobber
-        Write-Output "Importing user module: $($_.Name) $($item.Version)"
-        Import-Module -Name $item.Name -MinimumVersion $item.Version
-        $updateDone = $true
-    }
-
-    if ($updateDone)
-    {
-        Write-Output "Updates have been applied. Please restart your PowerShell session to ensure that the changes take effect."
-    }
-
-    $localModules = (Get-Module -ListAvailable "$me") | Sort-Object Version -Descending
-
-    $localModules = $localModules | Group-Object Name
-
-    foreach($groups in $localModules)
-    {
-        $retval = @()
-
-        foreach ($item in $groups.Group)
-        {
-            if( ($groups.Group -is [system.array]) -or ($null -ne $groups.Group))
-            {
-                if (-not(($item.ModuleBase -Like "*$env:ProgramFiles*") -or ($item.ModuleBase -Like "*$env:ProgramW6432*")))
-                {
-                    $retval += [PSCustomObject]@{ Name = $item.Name; Version = $item.Version; Path = $item.ModuleBase.TrimEnd($item.Version.ToString()).TrimEnd('\').TrimEnd($item.Name).TrimEnd('\') ;Obj = $item }
-                }
-            }
-        }
-
-        $UserModules = @($retval | Sort-Object Version -Descending)
-       
-        if ($UserModules.Count -ge 1)
-        {
-            for ($i = 1; $i -lt $UserModules.Count; $i++) {
-                $DirVers = "$($UserModules[$i].Path)\$($UserModules[$i].Name)\$($UserModules[$i].Version)"
-                Remove-Item -Recurse -Force -Path $DirVers
-                Write-Host "Removed old user module:" $UserModules[$i].Name $UserModules[$i].Version
-            }
-        }
-    }
-}
-
 
 <#
 function Expand-NuGetPackage {
@@ -743,3 +579,6 @@ $roots = @("C:\","D:\", "E:\") ; $roots | ForEach-Object { Get-ChildItem -Path $
 $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | ForEach-Object { Get-ChildItem -Path $_ -Include @("*.cs") -Recurse -ErrorAction SilentlyContinue } | Where-Object {!$_.PSIsContainer -and $_.Length -lt 100000 } | Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "power" } | Select-Object -ExpandProperty FullName
 
 #>
+
+UpdateModule
+$x=1
