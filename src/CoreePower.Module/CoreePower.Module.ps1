@@ -142,7 +142,28 @@ function PublishModule2 {
 
     [string]$NuGetAPIKey = Get-Content -Path "$($keyFileFullName.FullName)"
 
-    Publish-Module -Path "$Path" -NuGetApiKey "$NuGetAPIKey" -Repository "PSGallery" -Verbose
+    
+    $fullname = Get-ChildItem -Path $Path | Where-Object { $_.Extension -eq ".psd1" }
+
+    $fileContent = Get-Content -Path "$($fullname.FullName)" -Raw
+    $index = $fileContent.IndexOf("@{")
+    if($index -ne -1){
+        $fileContent = $fileContent.Substring(0, $index) + $fileContent.Substring($index + 2)
+    }
+    $index = $fileContent.LastIndexOf("}")
+    if($index -ne -1){
+        $fileContent = $fileContent.Substring(0, $index) + $fileContent.Substring($index + 2)
+    }
+
+    $Data  = Invoke-Expression "[PSCustomObject]@{$fileContent}"
+
+    try {
+        Publish-Module -Path "$Path" -NuGetApiKey "$NuGetAPIKey" -Repository "PSGallery" -Verbose
+        gitcommitpush -Path "$Path" -Comment "Publish $($Data.RootModule) $($Data.ModuleVersion)"
+    }
+    catch {
+        Write-Error "Failed to publish module: $($_.Exception.Message)"
+    }
 
 }
 
@@ -150,11 +171,12 @@ function gitcommitpush {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
     [alias("cpgit")]   
     param(
-        [string] $Path = ""
+        [string] $Path = "",
+        [string] $Comment = ""
     )
 
     &git -C "$Path" add -A
-    &git -C "$Path" commit -m "Auto comment" 
+    &git -C "$Path" commit -m "$Comment" 
     &git -C "$Path" push 
 }
 
@@ -785,7 +807,7 @@ $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | 
 
 #UpdateModule
 
-gitcommitpush -Path "C:\base\github.com\carsten-riedel\CoreePower.Module"
-$x=1
+#PublishModule2
+#$x=1
 
 
