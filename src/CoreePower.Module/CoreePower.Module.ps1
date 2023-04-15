@@ -669,11 +669,8 @@ function SampleFunction {
     #>
 }
 
-<<<<<<< HEAD
 #CreateModule -Path "C:\temp" -ModuleName "CoreePower.Module" -Description "Library for module management" -Author "Carsten Riedel" 
 #UpdateModuleVersion -Path "C:\temp\CoreePower.Module"
-=======
->>>>>>> 5085ff14574c7c3b691eabde4c45af2a36535116
 
 function ListModule {
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
@@ -694,12 +691,9 @@ function ListModule {
     #Find-Module -Name "$Name"
 }
 
-<<<<<<< HEAD
-=======
 
 
 
->>>>>>> 5085ff14574c7c3b691eabde4c45af2a36535116
 <#
 function Expand-NuGetPackage {
     param(
@@ -847,18 +841,7 @@ $roots = @("C:\","D:\", "E:\") ; $roots | ForEach-Object { Get-ChildItem -Path $
 
 $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | ForEach-Object { Get-ChildItem -Path $_ -Include @("*.cs") -Recurse -ErrorAction SilentlyContinue } | Where-Object {!$_.PSIsContainer -and $_.Length -lt 100000 } | Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "power" } | Select-Object -ExpandProperty FullName
 
-<<<<<<< HEAD
 #>
 
-UpdateModule
-$x=1
-=======
-
-
-
-$roots = @("C:\") ; $roots | ForEach-Object { Get-ChildItem -Path $_ -Include @("nuget.exe") -Recurse -ErrorAction SilentlyContinue } | Where-Object {!$_.PSIsContainer } | Select-Object -ExpandProperty FullName
-#>
-
-
-UpdateModule
->>>>>>> 5085ff14574c7c3b691eabde4c45af2a36535116
+#UpdateModule
+#$x=1
