@@ -492,7 +492,7 @@ function UpdateModule {
     -CompanyName "$($Data.CompanyName)"  `
     -Tags $($Data.PrivateData.PSData.Tags) `
     -CmdletsToExport @($Data.CmdletsToExport) `
-    -VariablesToExport @($Data.VariablesToExport)
+    -VariablesToExport @($Data.VariablesToExport) `
     -CompatiblePSEditions = @($Data.CompatiblePSEditions)
 
     #(Get-Content -path "$Path\$ModuleName\$ModuleName.psd1") | Set-Content -Encoding default -Path "$Path\$ModuleName\$ModuleName.psd1"
