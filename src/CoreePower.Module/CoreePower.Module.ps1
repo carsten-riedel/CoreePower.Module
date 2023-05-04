@@ -478,6 +478,7 @@ function UpdateModule {
     # Merge the properties of the second object into the combined object
     Merge-Object $Data $psd1layoutx 
 
+
     New-ModuleManifest `
     -Path "$($psd1BaseName.FullName)" `
     -GUID "$($Data.GUID)" `
@@ -493,7 +494,7 @@ function UpdateModule {
     -Tags $($Data.PrivateData.PSData.Tags) `
     -CmdletsToExport @($Data.CmdletsToExport) `
     -VariablesToExport @($Data.VariablesToExport) `
-    -CompatiblePSEditions = @($Data.CompatiblePSEditions)
+    -CompatiblePSEditions @($Data.CompatiblePSEditions)
 
     #(Get-Content -path "$Path\$ModuleName\$ModuleName.psd1") | Set-Content -Encoding default -Path "$Path\$ModuleName\$ModuleName.psd1"
     
