@@ -478,12 +478,21 @@ function UpdateModule {
     # Merge the properties of the second object into the combined object
     Merge-Object $Data $psd1layoutx 
 
+    if ("" -eq $Data.PrivateData.PSData.ReleaseNotes)
+    {
+        $fullswitch = "-ReleaseNotes `"$($Data.PrivateData.PSData.ReleaseNotes)`""
+    }
+
+    $fullswitch = ""
 
     New-ModuleManifest `
     -Path "$($psd1BaseName.FullName)" `
     -GUID "$($Data.GUID)" `
     -Description "$($Data.Description)" `
     -LicenseUri "$($Data.PrivateData.PSData.LicenseUri)" `
+    -ProjectUri "$($Data.PrivateData.PSData.ProjectUri)" `
+    -IconUri "$($Data.PrivateData.PSData.IconUri)" `
+    $fullswitch `
     -FunctionsToExport $Data.FunctionsToExport `
     -AliasesToExport $Data.AliasesToExport  `
     -ModuleVersion "$($Data.ModuleVersion)" `
@@ -812,3 +821,133 @@ $roots = @("C:\","D:\", "E:\") ; $roots | ForEach-Object { Get-ChildItem -Path $
 $roots = @("$($env:USERPROFILE)\source\repos", "C:\VCS" , "C:\base") ; $roots | ForEach-Object { Get-ChildItem -Path $_ -Include @("*.cs") -Recurse -ErrorAction SilentlyContinue } | Where-Object {!$_.PSIsContainer -and $_.Length -lt 100000 } | Where-Object { (Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue) -match "power" } | Select-Object -ExpandProperty FullName
 
 #>
+
+function UpdateModule2 {
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "")]
+    [alias("cpum2")]
+    param(
+        [string] $Path = ""
+    )
+
+    if ($Path -eq "")
+    {
+        $loc = Get-Location
+        $Path = $loc.Path
+    }
+
+    $Path = $Path.TrimEnd('\')
+
+    $psd1BaseName = Get-ChildItem -Path $Path | Where-Object { $_.Extension -eq ".psd1" } | Select-Object FullName
+
+    if($psd1BaseName.Count -eq 0)
+    {
+        Write-Error "Error: no powerShell module manifest files found. Please ensure that there is one .psd1 file in the directory and try again."
+        return
+    }
+
+    if($psd1BaseName.Count -gt 1)
+    {
+        Write-Error "Error: multiple module definition files found. Please ensure that there is only one .psd1 file in the directory and try again."
+        return
+    }
+
+    $fileContent = Get-Content -Path "$($psd1BaseName.FullName)" -Raw
+    $index = $fileContent.IndexOf("@{")
+    if($index -ne -1){
+        $fileContent = $fileContent.Substring(0, $index) + $fileContent.Substring($index + 2)
+    }
+    $index = $fileContent.LastIndexOf("}")
+    if($index -ne -1){
+        $fileContent = $fileContent.Substring(0, $index) + $fileContent.Substring($index + 2)
+    }
+
+    $Data  = Invoke-Expression "[PSCustomObject]@{$fileContent}"
+
+    $ver = [Version]$Data.ModuleVersion
+    $newver = [Version]::new($ver.Major, $ver.Minor, $ver.Build, ($ver.Revision + 1))
+    $Data.ModuleVersion = [string]$newver
+    $Data.PrivateData.PSData.LicenseUri = $Data.PrivateData.PSData.LicenseUri.Replace($ver, $newver)
+
+    $params = @{
+        Path = "$($psd1BaseName.FullName)"
+        RootModule = "$($Data.RootModule)"
+        ModuleVersion = "$($Data.ModuleVersion)"
+        GUID = "$($Data.GUID)"
+        Description = "$($Data.Description)"
+        Author = "$($Data.Author)"
+    }
+
+    if ($Data.FunctionsToExport) {
+        $params["FunctionsToExport"] = $Data.FunctionsToExport
+    }
+
+    if ($Data.AliasesToExport) {
+        $params["AliasesToExport"] = $Data.AliasesToExport
+    }
+
+    if ($Data.VariablesToExport) {
+        $params["VariablesToExport"] = $Data.VariablesToExport
+    }
+
+    if ($Data.CmdletsToExport) {
+        $params["CmdletsToExport"] = $Data.CmdletsToExport
+    }
+
+    if ($Data.RequiredModules) {
+        $params["RequiredModules"] = $Data.RequiredModules
+    }
+
+    if ($Data.CompanyName) {
+        $params["CompanyName"] = $Data.CompanyName
+    }
+
+    if ($Data.CompatiblePSEditions) {
+        $params["CompatiblePSEditions"] = $Data.CompatiblePSEditions
+    }
+
+    if ($Data.PrivateData.PSData.Tags) {
+        $params["Tags"] = $($Data.PrivateData.PSData.Tags)
+    }
+
+    if ($Data.PrivateData.PSData.ReleaseNotes) {
+        $params["ReleaseNotes"] = "$($Data.PrivateData.PSData.ReleaseNotes)"
+    }
+
+    if ($Data.PrivateData.PSData.LicenseUri) {
+        $params["LicenseUri"] = "$($Data.PrivateData.PSData.LicenseUri)"
+    }
+
+    if ($Data.PrivateData.PSData.IconUri) {
+        $params["IconUri"] = "$($Data.PrivateData.PSData.IconUri)"
+    }
+
+    if ($Data.PrivateData.PSData.ProjectUri) {
+        $params["ProjectUri"] = "$($Data.PrivateData.PSData.ProjectUri)"
+    }
+
+    # Wildcard fixes
+    if (-not($params["CmdletsToExport"]))
+    {
+        $params["CmdletsToExport"] = ""
+    }
+
+    if (-not($params["VariablesToExport"]))
+    {
+        $params["VariablesToExport"] = ""
+    }
+    
+
+    New-ModuleManifest @params
+    
+}
+function Test.CoreePower.Module {
+    param()
+    Write-Host "Start Test.CoreePower.Module"
+    #cpum2
+    Write-Host "End Test.CoreePower.Module"
+}
+
+if ($Host.Name -match "Visual Studio Code")
+{
+    Test.CoreePower.Module
+}
